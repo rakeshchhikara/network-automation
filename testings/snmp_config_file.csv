@@ -1,0 +1,6 @@
+hostname,ip,config_command
+R1,123.100.1.101,snmp-server location R1
+R2,123.100.1.102,snmp-server location R2
+R3,123.100.1.103,snmp-server location R3
+R4,123.100.1.104,snmp-server location R4
+R5,123.100.1.105,snmp-server location R5
