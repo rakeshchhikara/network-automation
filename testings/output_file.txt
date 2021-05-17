@@ -101,3 +101,39 @@ Mon May 17 16:21:31.729 UTC
 snmp-server location R5
 RP/0/0/CPU0:R5(config)#
 ################################################################################
+Hostname mismatch with snmp_config_file. It's R003 on device but config file has R3
+################################################################################
+
+
+RP/0/0/CPU0:R4#configure terminal
+
+Mon May 17 16:44:58.593 UTC
+snmp-server location R4
+
+RP/0/0/CPU0:R4(config)#
+################################################################################
+
+
+RP/0/0/CPU0:R1#configure terminal
+
+Mon May 17 16:45:02.309 UTC
+snmp-server location R1
+
+RP/0/0/CPU0:R1(config)#
+################################################################################
+
+
+RP/0/0/CPU0:R2#configure terminal
+
+Mon May 17 16:45:03.121 UTC
+snmp-server location R2
+
+RP/0/0/CPU0:R2(config)#
+################################################################################
+configure terminal
+
+Mon May 17 16:45:01.572 UTC
+RP/0/0/CPU0:R5(config)#snmp-server location R5
+
+RP/0/0/CPU0:R5(config)#
+################################################################################

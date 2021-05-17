@@ -11,15 +11,13 @@ def connect_2_device(device,config,host_name):
     prompt = connection.find_prompt()
     hostname = prompt[12:-1]
     if hostname == host_name:
-        pre_snmp = connection.send_config_set("show run snmp | i location")
         print(f'Starting Configuring Device - {hostname}\n')
         output = connection.send_config_set(config)
         connection.commit()
-        post_snmp = connection.send_config_set("do show run snmp | i location")
         print(output)
         print(f'Device configured successfully. Closing connection to {hostname}\n\n{80 * "#"}')
         connection.disconnect()
-        output_file.write(pre_snmp + output + post_snmp + '\n')
+        output_file.write(output + '\n')
         output_file.write(80 * '#' + '\n')
 
     else:
