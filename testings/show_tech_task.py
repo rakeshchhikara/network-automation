@@ -3,7 +3,6 @@
 
 from netmiko import ConnectHandler
 import paramiko
-from paramiko.client import SSHClient
 from scp import SCPClient
 import hashlib
 import getpass
@@ -56,15 +55,15 @@ for user_cmd in lines:
     print(f'\nFile to be copied: {filename}\n\nCopying file from device to this machine\n')
 
 
-    def createSSHClient(server, port, user, password):
+    def create_ssh_client(server, port, user, pass1):
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(server, port, user, password)
+        client.connect(server, port, user, pass1)
         return client
 
 
-    ssh = createSSHClient(device_ip, port=22, user=username, password=password)
+    ssh = create_ssh_client(device_ip, port=22, user=username, pass1=password)
     scp = SCPClient(ssh.get_transport())
     scp.get(filename)
 
