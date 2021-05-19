@@ -35,7 +35,8 @@ for user_cmd in lines:
 
     connection = ConnectHandler(**device)
     prompt = connection.find_prompt()
-    hostname = prompt[12:-1]
+    prompt_strip = prompt.find(':') + 1
+    hostname = prompt[prompt_strip:-1]
     print(f'Generating {user_cmd} on device {hostname}. Please wait...\n')
     output = connection.send_command_expect(user_cmd, expect_string=r'available', max_loops=5000,
                                             delay_factor=5)
