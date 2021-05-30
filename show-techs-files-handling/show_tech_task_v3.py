@@ -15,8 +15,8 @@ sr_token = input("Enter Upload Token: ")
 # Take user input for Device IP and run show tech command.
 device_ip = input('Enter device ip: ')
 username = input('Enter your username for device Login: ')
-#password = getpass.getpass(prompt='Enter device Password: ')
-password = 'cisco'
+password = getpass.getpass(prompt='Enter device Password: ')
+
 
 lines = []
 while True:
@@ -72,7 +72,7 @@ for user_cmd in lines:
 
 print(f'Following files generated and downloaded\n{local_files}')
 
-print(f'Now following files will be transferred to Case {sr_username} : \"{local_files}\"')
+print(f'Now following files will be transferred to Case - {sr_username} : \"{local_files}\"')
 
 uploaded_files = list()
 
