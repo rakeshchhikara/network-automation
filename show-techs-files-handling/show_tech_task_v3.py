@@ -63,12 +63,17 @@ for user_cmd in lines:
             source_file=filename, file_system='harddisk:/showtech',
             dest_file=filename, direction='get', overwrite_file=True)
         print(transfer_dict)
+
+        x = transfer_dict.get("file_transferred")
+        y = transfer_dict.get('file_verified')
+
+        if x and y is True:
+            local_files.append('filename')
+
     except EOFError:
         print(f'EOF error occurred while transferring file - {filename}. Please check')
     connection.disconnect()
     print(f'Disconnected from device')
-
-    local_files.append(filename)
 
 print(f'Following files generated and downloaded\n{local_files}')
 
