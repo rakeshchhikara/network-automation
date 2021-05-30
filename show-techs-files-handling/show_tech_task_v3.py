@@ -69,4 +69,24 @@ for user_cmd in lines:
     print(f'Disconnected from device')
 
     local_files.append(filename)
-    print(f'Following files generated and copied and downloaded\n{local_files}')
+
+print(f'Following files generated and downloaded\n{local_files}')
+
+print(f'Now following files will be transferred to Case {sr_username} : \"{local_files}\"')
+
+uploaded_files = list()
+
+for file in local_files:
+
+    auth = HTTPBasicAuth(sr_username, sr_token)
+    filename = file
+
+    f = open(filename, 'rb')
+    r = requests.put(url + filename, f, auth=auth, verify=False)
+    r.close()
+    f.close()
+    if r.status_code == 201:
+        print(f"File - {filename} Uploaded Successfully")
+        uploaded_files.append(filename)
+
+print(f"Following files successfully transferred to Case.\n{uploaded_files}")
