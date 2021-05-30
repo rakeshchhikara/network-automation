@@ -64,4 +64,9 @@ for user_cmd in lines:
             dest_file=filename, direction='get', overwrite_file=True)
         print(transfer_dict)
     except EOFError:
-        print(f'EOF error occured while transfering file. Please check')
+        print(f'EOF error occurred while transferring file - {filename}. Please check')
+    connection.disconnect()
+    print(f'Disconnected from device')
+
+    local_files.append(filename)
+    print(f'Following files generated and copied and downloaded\n{local_files}')
