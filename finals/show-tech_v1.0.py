@@ -75,7 +75,6 @@ for user_cmd in lines:
         # Copying file from Router to local machine. Using paramiko and scp client libraries
         print(f'\nFile to be copied: {filename}\n\nCopying file from device to this machine\n')
 
-
         # Using Paramiko library to create underlying channel for SCP.
         def create_ssh_client(server, port, user, pass1):
             client = paramiko.SSHClient()
