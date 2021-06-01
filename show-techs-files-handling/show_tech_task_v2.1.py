@@ -87,10 +87,10 @@ for user_cmd in lines:
     print(f'MD5 hash of local file: {md5_local}\n')
 
     if remote_md5 == md5_local:
-        print('MD5 has matched. Download successful')
+        print(f'MD5 has matched. Download successful.\n{120*"#"}')
         local_files.append(local_file_name)
     else:
-        print('MD5 has mismatch. Check again')
+        print(f'MD5 has mismatch. Check again.\n{120*"#"}')
 
 connection.disconnect()
 print(f'Disconnected from device - {hostname}')
