@@ -7,6 +7,13 @@ import paramiko
 from scp import SCPClient
 import hashlib
 import getpass
+import requests
+from requests.auth import HTTPBasicAuth
+
+
+url = 'https://cxd.cisco.com/home/'
+sr_username = input("Enter SR number: ")
+sr_token = input("Enter Upload Token: ")
 
 
 # Take user input for Device IP and run show tech command.
@@ -71,7 +78,7 @@ for user_cmd in lines:
     scp = SCPClient(ssh.get_transport())
     scp.get(filename)
 
-    print(f'File "{filename}" copied successfully to local machine\n\nNow calculating md5 hash of local file.\n')
+    print(f'File "{filename}" copied to local machine\n\nNow calculating md5 hash of local file.\n')
 
     local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
 
@@ -98,3 +105,17 @@ print(f'Disconnected from device - {hostname}')
 print(f'\nShow tech of all commands completed and downloaded to local machine\n')
 
 print(f'Now following files will be transferred to Case: "{local_files}"')
+
+for file in local_files:
+
+    auth = HTTPBasicAuth(sr_username, sr_token)
+    filename = file
+
+    f = open(filename, 'rb')
+    r = requests.put(url + filename, f, auth=auth, verify=False)
+    r.close()
+    f.close()
+    if r.status_code == 201:
+        print("File Uploaded Successfully")
+
+print("All files successfully transferred to Case")
