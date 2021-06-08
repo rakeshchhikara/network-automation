@@ -176,7 +176,6 @@ try:
                 lines.append(line)
             else:
                 break
-        text = '\n'.join(lines)
 
         print(f'\nNow connecting to device...')
         connection = ConnectHandler(**device)
@@ -206,7 +205,7 @@ try:
                 lines.append(line)
             else:
                 break
-        text = '\n'.join(lines)
+
         print('\nNow will connect to Device...')
 
         connection = ConnectHandler(**device)
@@ -239,7 +238,6 @@ try:
                 lines.append(line)
             else:
                 break
-        text = '\n'.join(lines)
 
         connection = ConnectHandler(**device)
         prompt = connection.find_prompt()
