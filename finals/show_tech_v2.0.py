@@ -4,6 +4,7 @@
 # FINALLY IT WILL UPLOAD THE DOWNLOADED FILES TO TAC CASE.
 # version 2
 
+import time
 from netmiko import ConnectHandler
 import paramiko
 from scp import SCPClient
@@ -112,8 +113,10 @@ def run_cmd_admin():
 
 def upload_2_sr():
     try:
-        for filename in local_files:
+        for file in local_files:
+
             auth = HTTPBasicAuth(sr_username, sr_token)
+            filename = file
 
             f = open(filename, 'rb')
             print(f'\nUploading file - "{filename}" to TAC Case\n')
@@ -132,6 +135,7 @@ prompt_choices = '''
 To run show tech commands in "Global mode" and upload file to TAC case Choose: 1
 To run show tech commands in "Admin mode" and upload files to TAC case Choose: 2
 To upload already generated or saved file to TAC case Choose: 3
+To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
 '''
 
 print(prompt_choices)
@@ -253,7 +257,42 @@ try:
         print(f'List of local files: {local_files}')
         upload_2_sr()
 
+    elif get_choice == 4:
+        print('User Selected option: 4')
+
+        lines = []
+        while True:
+            line = input('Enter command: ')
+            if line:
+                lines.append(line)
+            else:
+                break
+
+        connection = ConnectHandler(**device)
+        prompt = connection.find_prompt()
+        prompt_strip = prompt.find(':') + 1
+        hostname = prompt[prompt_strip:-1]
+
+        time_str = time.strftime("-%d%m%Y-%H%M%S-")
+        log_filename = hostname + time_str + 'logs.txt'
+        local_files.append(log_filename)
+
+        failed_cmd_list = []
+
+        with open(log_filename, 'w') as logs:
+            for cmd in lines:
+                print(f'Now running command - {cmd}')
+                output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False, strip_prompt=False)
+                logs.write(f'{prompt}{output}\n{100 * "#"}\n')
+                if '%' in output:
+                    failed_cmd_list.append(cmd)
+
+        print(f'File will be uploaded to case - {local_files}')
+        upload_2_sr()
+        print(f'\nFollowing commands are Invalid or Incomplete. Manual check required.\n{failed_cmd_list}')
+
     else:
-        print("Choose Option only from 1 to 3")
+        print("Choose Option only from 1 to 4")
+
 except ValueError:
     print("Enter only from option 1 to 3. Entered value not valid integer")
