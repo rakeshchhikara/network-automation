@@ -15,6 +15,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 
+
+
 def run_cmd():
     print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
     output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
