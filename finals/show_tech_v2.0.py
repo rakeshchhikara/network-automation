@@ -1,10 +1,11 @@
-# Author: Rakesh Kumar (rakeshk6@cisco.com)
+# Author: Rakesh Kumar
 # Usage: THIS SCRIPT WILL RUN SHOW-TECHS ON IOS-XR DEVICE AND THEN WILL COPY THE SHOW-TECH FILE TO LOCAL MACHINE.
 # ALSO IT WILL CHECK AND VERIFY REMOTE AND LOCAL(COPIED) FILE MD5 HASH VALUES.
 # FINALLY IT WILL UPLOAD THE DOWNLOADED FILES TO TAC CASE.
 # version 2
 
 import time
+import os
 from netmiko import ConnectHandler
 import paramiko
 from scp import SCPClient
@@ -13,8 +14,26 @@ import getpass
 import urllib3
 import requests
 from requests.auth import HTTPBasicAuth
+from tqdm import tqdm
+from tqdm.utils import CallbackIOWrapper
 
 
+def initial_func(user_prompt):
+    lines = []
+    while True:
+        line = input(user_prompt)
+
+        if line:
+            lines.append(line)
+        else:
+            break
+
+    print(f'\nNow connecting to device...')
+    connection = ConnectHandler(**device)
+    prompt = connection.find_prompt()
+    prompt_strip = prompt.find(':') + 1
+    hostname = prompt[prompt_strip:-1]
+    return connection, prompt, hostname, lines
 
 
 def run_cmd():
@@ -50,6 +69,7 @@ def retrieve_file(port):
 
 def remote_md5_check():
     try:
+        print(f'Calculating md5 hash of file "{filename}" on device... please wait.')
         check_md5 = connection.send_command_expect('show md5 file ' + filename, max_loops=5000, delay_factor=5)
 
         remote_md5 = check_md5[28:]
@@ -61,6 +81,7 @@ def remote_md5_check():
 
 def local_md5_check():
     try:
+        print(f'Calculating md5 hash of Local file "{filename}" ... please wait.')
         local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
 
         # Calculating MD5 hash value of local file
@@ -115,20 +136,13 @@ def run_cmd_admin():
 
 def upload_2_sr():
     try:
-        for file in local_files:
-
+        for filename in local_files:
             auth = HTTPBasicAuth(sr_username, sr_token)
-            filename = file
-
-            f = open(filename, 'rb')
-            print(f'\nUploading file - "{filename}" to TAC Case\n')
-            r = requests.put(url + filename, f, auth=auth, verify=False)
-            r.close()
-            f.close()
-            if r.status_code == 201:
-                print(f'File - "{filename}" Uploaded Successfully to case.')
-            else:
-                print(f'File - "{filename}" Upload to case Failed.')
+            file_size = os.stat(filename).st_size
+            with open(filename, "rb") as f:
+                with tqdm(total=file_size, unit="KB", unit_scale=True, unit_divisor=1024) as t:
+                    wrapped_file = CallbackIOWrapper(t.update, f, "read")
+                    requests.put(url + filename, auth=auth, data=wrapped_file)
     except Exception as err:
         print(f'Some error occurred while uploading file to TAC case', err)
 
@@ -138,6 +152,7 @@ To run show tech commands in "Global mode" and upload file to TAC case Choose: 1
 To run show tech commands in "Admin mode" and upload files to TAC case Choose: 2
 To upload already generated or saved file to TAC case Choose: 3
 To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
+To upload existing file on Local machine/JumpHost to TAC case: 5
 '''
 
 print(prompt_choices)
@@ -150,12 +165,15 @@ urllib3.disable_warnings()
 sr_username = input("Enter SR number: ")
 sr_token = input("Enter Upload Token: ")
 
-# Take user input for Device IP and Credentials.
-device_ip = input('Enter device ip: ')
-username = input('Enter your username for device Login: ')
-password = getpass.getpass(prompt='Enter device Password: ')
+device_ip = username = password = str()
 
-local_files = []        # List to store file names.
+if get_choice < 5:
+    # Take user input for Device IP and Credentials.
+    device_ip = input('Enter device ip: ')
+    username = input('Enter your username for device Login: ')
+    password = getpass.getpass(prompt='Enter device Password: ')
+
+local_files = []  # List to store file names.
 
 # Device details dict for connecting to device.
 device = {
@@ -167,134 +185,102 @@ device = {
     'verbose': True  # optional, default False
 }
 
+if get_choice == 1:
+    print("\nuser selected option: 1\n")
 
-try:
-    if get_choice == 1:
-        print("\nuser selected option: 1\n")
-        # Get input from user for show tech commands to be run on device.
-        # Note, just Hit Enter if there is no more command for input.
-        lines = []
-        while True:
-            line = input('Enter command: ')
-            if line:
-                lines.append(line)
-            else:
-                break
+    user_prompt = 'Enter show tech command: '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-        print(f'\nNow connecting to device...')
-        connection = ConnectHandler(**device)
-        prompt = connection.find_prompt()
-        prompt_strip = prompt.find(':') + 1
-        hostname = prompt[prompt_strip:-1]
+    for user_cmd in lines:
+        filename = run_cmd()
+        if filename is None:
+            continue
+        remote_md5 = remote_md5_check()
+        local_file_name = retrieve_file('22')
+        md5_local = local_md5_check()
+        md5_compare()
 
-        for user_cmd in lines:
-            filename = run_cmd()
-            if filename is None:
-                continue
-            remote_md5 = remote_md5_check()
-            local_file_name = retrieve_file('22')
-            md5_local = local_md5_check()
-            md5_compare()
+    print(f'List of local files: {local_files}')
 
-        print(f'List of local files: {local_files}')
+    upload_2_sr()
 
-        upload_2_sr()
+elif get_choice == 2:
+    print("\nuser selected option: 2\n")
 
-    elif get_choice == 2:
-        print("\nuser selected option: 2\n")
-        lines = []
-        while True:
-            line = input('Enter command (only admin mode commands without admin keyword): ')
-            if line:
-                lines.append(line)
-            else:
-                break
+    user_prompt = 'Enter command (only admin mode commands without admin keyword): '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-        print('\nNow will connect to Device...')
+    loc1 = prompt.find('/CPU')
+    active_processor = prompt[5:loc1]
 
-        connection = ConnectHandler(**device)
-        prompt = connection.find_prompt()
-        prompt_strip = prompt.find(':') + 1
-        hostname = prompt[prompt_strip:-1]
+    for user_cmd in lines:
+        filename = run_cmd_admin()
+        if filename is None:
+            continue
+        remote_md5 = remote_md5_check()
+        local_file_name = retrieve_file('22', )
+        md5_local = local_md5_check()
+        md5_compare()
 
-        loc1 = prompt.find('/CPU')
-        active_processor = prompt[5:loc1]
+    print(f'List of local files: {local_files}')
 
-        for user_cmd in lines:
-            filename = run_cmd_admin()
-            if filename is None:
-                continue
-            remote_md5 = remote_md5_check()
-            local_file_name = retrieve_file('22',)
-            md5_local = local_md5_check()
-            md5_compare()
+    upload_2_sr()
 
-        print(f'List of local files: {local_files}')
+elif get_choice == 3:
+    print("\nUser selected option: 3\n")
 
-        upload_2_sr()
+    user_prompt = 'Enter filename with complete path: '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-    elif get_choice == 3:
-        print("\nUser selected option: 3\n")
-        lines = []
-        while True:
-            line = input('Enter filename with full-path: ')
-            if line:
-                lines.append(line)
-            else:
-                break
+    for filename in lines:
+        local_file_name = retrieve_file('22')
+        if local_file_name is None:
+            continue
+        remote_md5 = remote_md5_check()
+        md5_local = local_md5_check()
+        md5_compare()
 
-        connection = ConnectHandler(**device)
-        prompt = connection.find_prompt()
-        prompt_strip = prompt.find(':') + 1
-        hostname = prompt[prompt_strip:-1]
+    print(f'List of local files: {local_files}')
+    upload_2_sr()
 
-        for filename in lines:
-            local_file_name = retrieve_file('22')
-            if local_file_name is None:
-                continue
-            remote_md5 = remote_md5_check()
-            md5_local = local_md5_check()
-            md5_compare()
+elif get_choice == 4:
+    print('User Selected option: 4')
 
-        print(f'List of local files: {local_files}')
-        upload_2_sr()
+    user_prompt = 'Enter Show Command: '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-    elif get_choice == 4:
-        print('User Selected option: 4')
+    time_str = time.strftime("-%d%m%Y-%H%M%S-")
+    log_filename = hostname + time_str + 'logs.txt'
+    local_files.append(log_filename)
 
-        lines = []
-        while True:
-            line = input('Enter command: ')
-            if line:
-                lines.append(line)
-            else:
-                break
+    failed_cmd_list = []
 
-        connection = ConnectHandler(**device)
-        prompt = connection.find_prompt()
-        prompt_strip = prompt.find(':') + 1
-        hostname = prompt[prompt_strip:-1]
+    with open(log_filename, 'w') as logs:
+        for cmd in lines:
+            print(f'Now running command - {cmd}')
+            output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False,
+                                             strip_prompt=False)
+            logs.write(f'{prompt}{output}\n{100 * "#"}\n')
+            if '%' in output:
+                failed_cmd_list.append(cmd)
 
-        time_str = time.strftime("-%d%m%Y-%H%M%S-")
-        log_filename = hostname + time_str + 'logs.txt'
-        local_files.append(log_filename)
+    print(f'File will be uploaded to case - {local_files}')
+    upload_2_sr()
+    print(f'\nFollowing commands are Invalid or Incomplete. Manual check required.\n{failed_cmd_list}')
 
-        failed_cmd_list = []
+elif get_choice == 5:
+    print('User Selected option: 5')
 
-        with open(log_filename, 'w') as logs:
-            for cmd in lines:
-                print(f'Now running command - {cmd}')
-                output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False, strip_prompt=False)
-                logs.write(f'{prompt}{output}\n{100 * "#"}\n')
-                if '%' in output:
-                    failed_cmd_list.append(cmd)
+    user_prompt = input('Enter Local file name(same working directory): ')
+    local_files.append(user_prompt)
 
-        print(f'File will be uploaded to case - {local_files}')
-        upload_2_sr()
-        print(f'\nFollowing commands are Invalid or Incomplete. Manual check required.\n{failed_cmd_list}')
+    upload_2_sr()
 
-    else:
-        print("Choose Option only from 1 to 4")
+else:
+    print("Choose Option only from 1 to 5")
 
-except ValueError:
-    print("Enter only from option 1 to 3. Entered value not valid integer")
+print('\n#######  Thanks for using this Script.  ########\n')
