@@ -1,8 +1,11 @@
 # Author: Rakesh Kumar
-# Usage: THIS SCRIPT WILL RUN SHOW-TECHS ON IOS-XR DEVICE AND THEN WILL COPY THE SHOW-TECH FILE TO LOCAL MACHINE.
-# ALSO IT WILL CHECK AND VERIFY REMOTE AND LOCAL(COPIED) FILE MD5 HASH VALUES.
-# FINALLY IT WILL UPLOAD THE DOWNLOADED FILES TO TAC CASE.
-# version 2
+# Usage: This script has Five options that user can choose.
+# To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+# To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
+# To upload already generated or saved file/s to TAC case Choose:                  3
+# To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
+# To upload existing file on Local machine/JumpHost to TAC case: 5
+# version 1.0
 
 import time
 import os
@@ -40,8 +43,8 @@ def run_cmd():
     print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
     output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
 
-    if ('%' in output) or ('syntax error' in output):
-        print(f'Entered command - "{user_cmd}" is Invalid. Please re-check correct command.\n{120 * "#"}')
+    if ('^' in output) or ('syntax error' in output) or ('Incomplete command' in output):
+        print(f'Entered command - "{user_cmd}" is Invalid or Incomplete. Please re-check correct command.\n{120 * "#"}')
     else:
         print(output)
         # Store show-tech file name and path on device in 'filename' variable.
@@ -115,7 +118,7 @@ def run_cmd_admin():
     print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
     output = connection.send_command(user_cmd, expect_string=r'sysadmin', max_loops=50000, delay_factor=5)
 
-    if ('%' in output) or ('syntax error' in output):
+    if ('^' in output) or ('syntax error' in output) or ('Incomplete command' in output):
         print(
             f'Entered command - "{user_cmd}" is Incomplete or Invalid. Please re-check correct command.\n{120 * "#"}')
     else:
@@ -135,22 +138,41 @@ def run_cmd_admin():
 
 
 def upload_2_sr():
-    try:
-        for filename in local_files:
+    for filename in local_files:
+        try:
+            print(f'\nUploading file -"{filename}" to TAC case')
             auth = HTTPBasicAuth(sr_username, sr_token)
             file_size = os.stat(filename).st_size
             with open(filename, "rb") as f:
                 with tqdm(total=file_size, unit="KB", unit_scale=True, unit_divisor=1024) as t:
                     wrapped_file = CallbackIOWrapper(t.update, f, "read")
                     requests.put(url + filename, auth=auth, data=wrapped_file)
-    except Exception as err:
-        print(f'Some error occurred while uploading file to TAC case', err)
+        except Exception as err:
+            print(f'Some error occurred while uploading file - "{filename}" to TAC case', err)
 
 
 prompt_choices = '''
-To run show tech commands in "Global mode" and upload file to TAC case Choose: 1
-To run show tech commands in "Admin mode" and upload files to TAC case Choose: 2
-To upload already generated or saved file to TAC case Choose: 3
+
+#################################################################################################
+# Version 1.0                                                                                   #
+# Purpose: This Script can help Engineers/Customers to automate gathering TAC requested DATA    #
+  for IOS-XR devices. The could include various show tech in Global/Admin mode or simple        #
+  Show commands outputs.                                                                        #
+                                                                                                #
+  User need to supply the information to script based on Task chosen and this Script will       #
+  generate the data and upload to TAC case.                                                     #
+                                                                                                #
+  Note: This script is designed for IOS-XR devices but user can tweak it for any platform.      #
+                                                                                                #
+#################################################################################################
+
+==================================================================================
+Please select the Task number from below List and Enter as your choice on Prompt.
+==================================================================================
+
+To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
+To upload already generated or saved file/s to TAC case Choose:                  3
 To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
 To upload existing file on Local machine/JumpHost to TAC case: 5
 '''
@@ -185,30 +207,36 @@ device = {
     'verbose': True  # optional, default False
 }
 
-if get_choice == 1:
-    print("\nuser selected option: 1\n")
+failed_list = []
 
-    user_prompt = 'Enter show tech command: '
+if get_choice == 1:
+    print(f'\nEnter one show tech command per line. Once all show tech commands entered,\n'
+          f'just Hit Enter key to execute script\n')
+    user_prompt = 'Enter show tech command(Only Global mode): '
     t = initial_func(user_prompt)
     (connection, prompt, hostname, lines) = t
 
     for user_cmd in lines:
         filename = run_cmd()
         if filename is None:
+            failed_list.append(user_cmd)
             continue
         remote_md5 = remote_md5_check()
         local_file_name = retrieve_file('22')
         md5_local = local_md5_check()
+        if md5_local is None:
+            failed_list.append(user_cmd)
         md5_compare()
 
     print(f'List of local files: {local_files}')
 
     upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
 
 elif get_choice == 2:
-    print("\nuser selected option: 2\n")
-
-    user_prompt = 'Enter command (only admin mode commands without admin keyword): '
+    print(f'\nEnter one Admin mode show tech command per line. Once all show tech commands entered,\n'
+          f'just Hit Enter key to execute script\n')
+    user_prompt = 'Enter command (ONLY admin mode commands without admin keyword): '
     t = initial_func(user_prompt)
     (connection, prompt, hostname, lines) = t
 
@@ -218,18 +246,23 @@ elif get_choice == 2:
     for user_cmd in lines:
         filename = run_cmd_admin()
         if filename is None:
+            failed_list.append(user_cmd)
             continue
         remote_md5 = remote_md5_check()
         local_file_name = retrieve_file('22', )
         md5_local = local_md5_check()
+        if md5_local is None:
+            failed_list.append(user_cmd)
         md5_compare()
 
     print(f'List of local files: {local_files}')
 
     upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
 
 elif get_choice == 3:
-    print("\nUser selected option: 3\n")
+    print(f'\nEnter filename with complete path on Device in each line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
 
     user_prompt = 'Enter filename with complete path: '
     t = initial_func(user_prompt)
@@ -238,16 +271,21 @@ elif get_choice == 3:
     for filename in lines:
         local_file_name = retrieve_file('22')
         if local_file_name is None:
+            failed_list.append(filename)
             continue
         remote_md5 = remote_md5_check()
         md5_local = local_md5_check()
+        if md5_local is None:
+            failed_list.append(filename)
         md5_compare()
 
     print(f'List of local files: {local_files}')
     upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed files, if any: {failed_list}')
 
 elif get_choice == 4:
-    print('User Selected option: 4')
+    print(f'\nEnter Show command per line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
 
     user_prompt = 'Enter Show Command: '
     t = initial_func(user_prompt)
@@ -257,30 +295,27 @@ elif get_choice == 4:
     log_filename = hostname + time_str + 'logs.txt'
     local_files.append(log_filename)
 
-    failed_cmd_list = []
-
     with open(log_filename, 'w') as logs:
         for cmd in lines:
             print(f'Now running command - {cmd}')
             output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False,
                                              strip_prompt=False)
             logs.write(f'{prompt}{output}\n{100 * "#"}\n')
-            if '%' in output:
-                failed_cmd_list.append(cmd)
+            if '^' in output:
+                failed_list.append(cmd)
 
     print(f'File will be uploaded to case - {local_files}')
     upload_2_sr()
-    print(f'\nFollowing commands are Invalid or Incomplete. Manual check required.\n{failed_cmd_list}')
+    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
 
 elif get_choice == 5:
-    print('User Selected option: 5')
+    print(f'\nEnter Local filename in each line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
 
     user_prompt = input('Enter Local file name(same working directory): ')
     local_files.append(user_prompt)
-
     upload_2_sr()
-
 else:
     print("Choose Option only from 1 to 5")
 
-print('\n#######  Thanks for using this Script.  ########\n')
+print('\n\n#######  Thanks for using this Script.  ########\n')
