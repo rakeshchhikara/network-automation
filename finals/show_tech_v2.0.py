@@ -21,6 +21,7 @@ from tqdm import tqdm
 from tqdm.utils import CallbackIOWrapper
 
 
+# This function is take user input for commands/files and connect to device.
 def initial_func(user_prompt):
     lines = []
     while True:
@@ -39,6 +40,7 @@ def initial_func(user_prompt):
     return connection, prompt, hostname, lines
 
 
+# This function is for running Global show tech commands one at a time and capture filename with path.
 def run_cmd():
     print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
     output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
@@ -54,6 +56,7 @@ def run_cmd():
         return filename
 
 
+# This function is download the captured file from device to local machine/JumpServer.
 def retrieve_file(port):
     client = paramiko.SSHClient()
     client.load_system_host_keys()
@@ -69,7 +72,7 @@ def retrieve_file(port):
         local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
         return local_file_name
 
-
+# This function is to check MD5 hash value of file on Device.
 def remote_md5_check():
     try:
         print(f'Calculating md5 hash of file "{filename}" on device... please wait.')
@@ -81,7 +84,7 @@ def remote_md5_check():
     else:
         return remote_md5
 
-
+# This function is to check MD5 hash value of copied file to Local machine/Jump Server.
 def local_md5_check():
     try:
         print(f'Calculating md5 hash of Local file "{filename}" ... please wait.')
@@ -99,7 +102,7 @@ def local_md5_check():
     else:
         return md5_local
 
-
+# This function is to compare both local and remote MD5 hashes.
 def md5_compare():
     print(f'\nMD5 calculated on Device - {remote_md5}')
     print(f'Local md5 calculated: {md5_local}')
@@ -110,6 +113,8 @@ def md5_compare():
         print(f'MD5 has mismatch. Check again.\n{120 * "#"}')
 
 
+# This function is to run Admin mode show tech commands and copy the file to
+# Global mode in "/harddisk/showtech/" directory.
 def run_cmd_admin():
     print(f'Entering in Admin mode to generate Admin specific show tech of command - "{user_cmd}"')
 
@@ -137,6 +142,7 @@ def run_cmd_admin():
         return filename
 
 
+# This function is to Upload the file from Local machine/JumpServer to TAC case.
 def upload_2_sr():
     for filename in local_files:
         try:
@@ -187,6 +193,7 @@ urllib3.disable_warnings()
 sr_username = input("Enter SR number: ")
 sr_token = input("Enter Upload Token: ")
 
+# Defining Global variables.
 device_ip = username = password = str()
 
 if get_choice < 5:
@@ -195,7 +202,7 @@ if get_choice < 5:
     username = input('Enter your username for device Login: ')
     password = getpass.getpass(prompt='Enter device Password: ')
 
-local_files = []  # List to store file names.
+local_files = []  # List to store file names on local machine/JumpServer.
 
 # Device details dict for connecting to device.
 device = {
@@ -207,7 +214,9 @@ device = {
     'verbose': True  # optional, default False
 }
 
+# List to store any failed operation of command or file copy etc.
 failed_list = []
+
 
 if get_choice == 1:
     print(f'\nEnter one show tech command per line. Once all show tech commands entered,\n'
@@ -306,7 +315,7 @@ elif get_choice == 4:
 
     print(f'File will be uploaded to case - {local_files}')
     upload_2_sr()
-    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
+    print(f'\n{20*"#"}\nList of failed commands, if any. (Manual check of captured file required): {failed_list}')
 
 elif get_choice == 5:
     print(f'\nEnter Local filename in each line. Once all files are entered,\n'
