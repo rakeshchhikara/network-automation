@@ -1,9 +1,14 @@
-# Author: Rakesh Kumar (rakeshk6@cisco.com)
-# Usage: THIS SCRIPT WILL RUN SHOW-TECHS ON IOS-XR DEVICE AND THEN WILL COPY THE SHOW-TECH FILE TO LOCAL MACHINE.
-# ALSO IT WILL CHECK AND VERIFY REMOTE AND LOCAL(COPIED) FILE MD5 HASH VALUES.
-# FINALLY IT WILL UPLOAD THE DOWNLOADED FILES TO TAC CASE.
-# version 1
+# Author: Rakesh Kumar
+# Usage: This script has Five options that user can choose.
+# To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+# To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
+# To upload already generated or saved file/s to TAC case Choose:                  3
+# To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
+# To upload existing file on Local machine/JumpHost to TAC case: 5
+# version 1.0
 
+import time
+import os
 from netmiko import ConnectHandler
 import paramiko
 from scp import SCPClient
@@ -12,6 +17,180 @@ import getpass
 import urllib3
 import requests
 from requests.auth import HTTPBasicAuth
+from tqdm import tqdm
+from tqdm.utils import CallbackIOWrapper
+
+
+# This function is take user input for commands/files and connect to device.
+def initial_func(user_prompt):
+    lines = []
+    while True:
+        line = input(user_prompt)
+
+        if line:
+            lines.append(line)
+        else:
+            break
+
+    print(f'\nNow connecting to device...')
+    connection = ConnectHandler(**device)
+    prompt = connection.find_prompt()
+    prompt_strip = prompt.find(':') + 1
+    hostname = prompt[prompt_strip:-1]
+    return connection, prompt, hostname, lines
+
+
+# This function is for running Global show tech commands one at a time and capture filename with path.
+def run_cmd():
+    print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
+    output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
+
+    if ('^' in output) or ('syntax error' in output) or ('Incomplete command' in output):
+        print(f'Entered command - "{user_cmd}" is Invalid or Incomplete. Please re-check correct command.\n{120 * "#"}')
+    else:
+        print(output)
+        # Store show-tech file name and path on device in 'filename' variable.
+        file_start_loc = output.find('/harddisk')
+        file_end_loc = output.find('.tgz') + 4
+        filename = output[file_start_loc:file_end_loc]
+        return filename
+
+
+# This function is download the captured file from device to local machine/JumpServer.
+def retrieve_file(port):
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(device_ip, port, username, password, timeout=20)
+    try:
+        scp = SCPClient(client.get_transport())
+        scp.get(filename)
+    except Exception as e:
+        print(f'Some Exception occurred while retrieving file to local machine. Exception detail:', e)
+    else:
+        print(f'\nFile "{filename}" copied to local machine\n')
+        local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
+        return local_file_name
+
+# This function is to check MD5 hash value of file on Device.
+def remote_md5_check():
+    try:
+        print(f'Calculating md5 hash of file "{filename}" on device... please wait.')
+        check_md5 = connection.send_command_expect('show md5 file ' + filename, max_loops=5000, delay_factor=5)
+
+        remote_md5 = check_md5[28:]
+    except Exception as err:
+        print(f'Some exception occurred while performing remote md5 check', err)
+    else:
+        return remote_md5
+
+# This function is to check MD5 hash value of copied file to Local machine/Jump Server.
+def local_md5_check():
+    try:
+        print(f'Calculating md5 hash of Local file "{filename}" ... please wait.')
+        local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
+
+        # Calculating MD5 hash value of local file
+        md5_hash = hashlib.md5()
+        with open(local_file_name, "rb") as f:
+            # Read and update hash in chunks of 4K
+            for byte_block in iter(lambda: f.read(4096), b""):
+                md5_hash.update(byte_block)
+            md5_local = (md5_hash.hexdigest())
+    except Exception as err:
+        print(f'Some exception occurred while performing md5 check on local file', err)
+    else:
+        return md5_local
+
+
+# This function is to compare both local and remote MD5 hashes.
+def md5_compare():
+    print(f'\nMD5 calculated on Device: {remote_md5}')
+    print(f'Local md5 calculated: {md5_local}')
+    if remote_md5 == md5_local:
+        print(f'MD5 has matched. Download successful.\n{120 * "#"}')
+        local_files.append(local_file_name)
+    else:
+        print(f'MD5 has mismatch. Check again.\n{120 * "#"}')
+
+
+# This function is to run Admin mode show tech commands and copy the file to
+# Global mode in "/harddisk/showtech/" directory.
+def run_cmd_admin():
+    print(f'Entering in Admin mode to generate Admin specific show tech of command - "{user_cmd}"')
+
+    output = connection.send_command('admin', expect_string=r'sysadmin')
+    print(output)
+    processor_loc1 = output.find('sysadmin') + 14
+    processor_loc2 = output.find('#')
+    active_processor = output[processor_loc1:processor_loc2]
+
+    print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
+    output = connection.send_command(user_cmd, expect_string=r'sysadmin', max_loops=50000, delay_factor=5)
+
+    if ('^' in output) or ('syntax error' in output) or ('Incomplete command' in output):
+        print(
+            f'Entered command - "{user_cmd}" is Incomplete or Invalid. Please re-check correct command.\n{120 * "#"}')
+    else:
+        print(output)
+        file_start_loc = output.find('/')
+        file_end_loc = output.find('.tgz') + 4
+        filename = output[file_start_loc:file_end_loc]
+        print('\nCopying file to Global mode')
+        copy_cmd = f'copy {filename} harddisk:/showtech location 0/{active_processor}/CPU0/VM1'
+        copy2global = connection.send_command(copy_cmd, expect_string=r'sysadmin')
+        print(f'{copy_cmd}/n{copy2global}')
+        connection.send_command('exit', expect_string=r'0/R')
+        file_loc = filename.find('showtech-')
+        filename = filename[file_loc:]
+        filename = '/harddisk:/showtech/' + filename
+        return filename
+
+
+# This function is to Upload the file from Local machine/JumpServer to TAC case.
+def upload_2_sr():
+    for filename in local_files:
+        try:
+            print(f'\nUploading file -"{filename}" to TAC case')
+            auth = HTTPBasicAuth(sr_username, sr_token)
+            file_size = os.stat(filename).st_size
+            with open(filename, "rb") as f:
+                with tqdm(total=file_size, unit="KB", unit_scale=True, unit_divisor=1024) as t:
+                    wrapped_file = CallbackIOWrapper(t.update, f, "read")
+                    requests.put(url + filename, auth=auth, data=wrapped_file)
+        except Exception as err:
+            print(f'Some error occurred while uploading file - "{filename}" to TAC case', err)
+
+
+prompt_choices = '''
+
+#################################################################################################
+# Version 1.0                                                                                   #
+# Purpose: This Script can help Engineers/Customers to automate gathering TAC requested DATA    #
+  for IOS-XR devices. The could include various show tech in Global/Admin mode or simple        #
+  Show commands outputs.                                                                        #
+                                                                                                #
+  User need to supply the information to script based on Task chosen and this Script will       #
+  generate the data and upload to TAC case.                                                     #
+                                                                                                #
+  Note: This script is designed for IOS-XR devices but user can tweak it for any platform.      #
+                                                                                                #
+#################################################################################################
+
+==================================================================================
+Please select the Task number from below List and Enter as your choice on Prompt.
+==================================================================================
+
+To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
+To upload already generated or saved file/s to TAC case Choose:                  3
+To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
+To upload existing file on Local machine/JumpHost to TAC case: 5
+'''
+
+print(prompt_choices)
+
+get_choice = int(input('Enter your Choice: '))
 
 # Get user input for TAC case details to upload files.
 url = 'https://cxd.cisco.com/home/'
@@ -19,25 +198,16 @@ urllib3.disable_warnings()
 sr_username = input("Enter SR number: ")
 sr_token = input("Enter Upload Token: ")
 
-# Take user input for Device IP and Credentials.
-device_ip = input('Enter device ip: ')
-username = input('Enter your username for device Login: ')
-password = getpass.getpass(prompt='Enter device Password: ')
+# Defining Global variables.
+device_ip = username = password = str()
 
-# Get input from user for show tech commands to be run on device.
-# Note, just Hit Enter if there is no more command for input.
-lines = []
-while True:
-    line = input('Enter command: ')
-    if line:
-        lines.append(line)
-    else:
-        break
-text = '\n'.join(lines)
+if get_choice < 5:
+    # Take user input for Device IP and Credentials.
+    device_ip = input('Enter device ip: ')
+    username = input('Enter your username for device Login: ')
+    password = getpass.getpass(prompt='Enter device Password: ')
 
-local_files = []  # List to store file names.
-
-print(f'\nShow tech of these commands with be taken: {lines}\n')
+local_files = []  # List to store file names on local machine/JumpServer.
 
 # Device details dict for connecting to device.
 device = {
@@ -46,92 +216,119 @@ device = {
     'username': username,
     'password': password,
     'port': 22,  # optional, default 22
-    'verbose': True  # optional, default False
+    'verbose': True,  # optional, default False
 }
 
-connection = ConnectHandler(**device)
-prompt = connection.find_prompt()
-prompt_strip = prompt.find(':') + 1
-hostname = prompt[prompt_strip:-1]
-
-for user_cmd in lines:
-    print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
-    output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
-    print(output)
-
-    if "Invalid input" in output:
-        print(f'Entered command - "{user_cmd}" is Invalid. Please re-check correct command.\n{120 * "#"}')
-    else:
-        # Store show-tech file name and path on device in 'filename' variable.
-        file_start_loc = output.find('/harddisk')
-        file_end_loc = output.find('.tgz') + 4
-        filename = output[file_start_loc:file_end_loc]
-
-        # Check md5 hash value of file on Router
-        check_md5 = connection.send_command_expect('show md5 file ' + filename, max_loops=5000, delay_factor=5)
-
-        remote_md5 = check_md5[28:]
-
-        # Copying file from Router to local machine. Using paramiko and scp client libraries
-        print(f'\nFile to be copied: {filename}\n\nCopying file from device to this machine\n')
-
-        # Using Paramiko library to create underlying channel for SCP.
-        def create_ssh_client(server, port, user, pass1):
-            client = paramiko.SSHClient()
-            client.load_system_host_keys()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(server, port, user, pass1)
-            return client
+# List to store any failed operation of command or file copy etc.
+failed_list = []
 
 
-        try:
-            ssh = create_ssh_client(device_ip, port=22, user=username, pass1=password)
-            scp = SCPClient(ssh.get_transport())
-            scp.get(filename)
-        except Exception as e:
-            print(f'Some Exception occurred. Exception detail:', e)
-        else:
-            print(f'File "{filename}" copied to local machine\n\nNow calculating md5 hash of local file.\n')
+if get_choice == 1:
+    print(f'\nEnter one show tech command per line. Once all show tech commands entered,\n'
+          f'just Hit Enter key to execute script\n')
+    user_prompt = 'Enter show tech command(Only Global mode): '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-            local_file_name = filename[20:]  # Grabbing only name of file. Stripped path.
+    for user_cmd in lines:
+        filename = run_cmd()
+        if filename is None:
+            failed_list.append(user_cmd)
+            continue
+        remote_md5 = remote_md5_check()
+        local_file_name = retrieve_file('22')
+        md5_local = local_md5_check()
+        if md5_local is None:
+            failed_list.append(user_cmd)
+        md5_compare()
 
-            # Calculating MD5 hash value of local file
-            md5_hash = hashlib.md5()
-            with open(local_file_name, "rb") as f:
-                # Read and update hash in chunks of 4K
-                for byte_block in iter(lambda: f.read(4096), b""):
-                    md5_hash.update(byte_block)
-                md5_local = (md5_hash.hexdigest())
+    print(f'List of local files: {local_files}')
 
-            print(f'\nMD5 hash of remote file on {hostname}: {remote_md5}')
-            print(f'MD5 hash of local file: {md5_local}\n')
+    upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
 
-            if remote_md5 == md5_local:
-                print(f'MD5 has matched. Download successful.\n{120 * "#"}')
-                local_files.append(local_file_name)
-            else:
-                print(f'MD5 has mismatch. Check again.\n{120 * "#"}')
+elif get_choice == 2:
+    print(f'\nEnter one Admin mode show tech command per line. Once all show tech commands entered,\n'
+          f'just Hit Enter key to execute script\n')
+    user_prompt = 'Enter command (ONLY admin mode commands without admin keyword): '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-connection.disconnect()
-print(f'Disconnected from device - {hostname}')
+    for user_cmd in lines:
+        filename = run_cmd_admin()
+        if filename is None:
+            failed_list.append(user_cmd)
+            continue
+        remote_md5 = remote_md5_check()
+        remote_md5 = remote_md5.strip()
+        local_file_name = retrieve_file('22', )
+        md5_local = local_md5_check()
+        md5_local = md5_local.strip()
+        if md5_local is None:
+            failed_list.append(user_cmd)
+        md5_compare()
 
-print(f'\nShow tech of all commands completed and downloaded to local machine\n')
+    print(f'List of local files: {local_files}')
 
-print(f'Now following files will be transferred to Case: "{local_files}"')
+    upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
 
-for file in local_files:
+elif get_choice == 3:
+    print(f'\nEnter filename with complete path on Device in each line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
 
-    auth = HTTPBasicAuth(sr_username, sr_token)
-    filename = file
+    user_prompt = 'Enter filename with complete path: '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
 
-    f = open(filename, 'rb')
-    print(f'\nUploading file - "{filename}" to TAC Case\n')
-    r = requests.put(url + filename, f, auth=auth, verify=False)
-    r.close()
-    f.close()
-    if r.status_code == 201:
-        print(f'File - "{filename}" Uploaded Successfully to case.')
-    else:
-        print(f'File - "{filename}" upload to case Failed.')
+    for filename in lines:
+        local_file_name = retrieve_file('22')
+        if local_file_name is None:
+            failed_list.append(filename)
+            continue
+        remote_md5 = remote_md5_check()
+        md5_local = local_md5_check()
+        if md5_local is None:
+            failed_list.append(filename)
+        md5_compare()
 
-print("\n Script executed. Please look for errors in logs, if any.\nThanks for using !!!")
+    print(f'List of local files: {local_files}')
+    upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed files, if any: {failed_list}')
+
+elif get_choice == 4:
+    print(f'\nEnter Show command per line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
+
+    user_prompt = 'Enter Show Command: '
+    t = initial_func(user_prompt)
+    (connection, prompt, hostname, lines) = t
+
+    time_str = time.strftime("-%d%m%Y-%H%M%S-")
+    log_filename = hostname + time_str + 'logs.txt'
+    local_files.append(log_filename)
+
+    with open(log_filename, 'w') as logs:
+        for cmd in lines:
+            print(f'Now running command - {cmd}')
+            output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False,
+                                             strip_prompt=False)
+            logs.write(f'{prompt}{output}\n{100 * "#"}\n')
+            if '^' in output:
+                failed_list.append(cmd)
+
+    print(f'File will be uploaded to case - {local_files}')
+    upload_2_sr()
+    print(f'\n{20*"#"}\nList of failed commands, if any. (Manual check of captured file required): {failed_list}')
+
+elif get_choice == 5:
+    print(f'\nEnter Local filename in each line. Once all files are entered,\n'
+          f'just Hit Enter key to execute script\n')
+
+    user_prompt = input('Enter Local file name(same working directory): ')
+    local_files.append(user_prompt)
+    upload_2_sr()
+else:
+    print("Choose Option only from 1 to 5")
+
+print('\n\n#######  Thanks for using this Script.  ########\n')
