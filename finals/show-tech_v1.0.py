@@ -243,6 +243,8 @@ if get_choice == 1:
         md5_compare()
 
     print(f'List of local files: {local_files}')
+    connection.disconnect()
+    print(f'Disconnected from device - {hostname}')
 
     upload_2_sr()
     print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
@@ -269,6 +271,8 @@ elif get_choice == 2:
         md5_compare()
 
     print(f'List of local files: {local_files}')
+    connection.disconnect()
+    print(f'Disconnected from device - {hostname}')
 
     upload_2_sr()
     print(f'\n{20*"#"}\nList of failed commands, if any: {failed_list}')
@@ -293,6 +297,9 @@ elif get_choice == 3:
         md5_compare()
 
     print(f'List of local files: {local_files}')
+    connection.disconnect()
+    print(f'Disconnected from device - {hostname}')
+
     upload_2_sr()
     print(f'\n{20*"#"}\nList of failed files, if any: {failed_list}')
 
@@ -318,6 +325,9 @@ elif get_choice == 4:
                 failed_list.append(cmd)
 
     print(f'File will be uploaded to case - {local_files}')
+    connection.disconnect()
+    print(f'Disconnected from device - {hostname}')
+
     upload_2_sr()
     print(f'\n{20*"#"}\nList of failed commands, if any. (Manual check of captured file required): {failed_list}')
 
