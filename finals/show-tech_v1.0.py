@@ -1,8 +1,8 @@
 # Author: Rakesh Kumar
 # Usage: This script has Five options that user can choose.
-# To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+# To run show tech commands in "IOS-XR mode" and upload file/s to TAC case Choose: 1
 # To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
-# To upload already generated or saved file/s to TAC case Choose:                  3
+# To upload already generated or saved file/s to TAC case Choose: 3
 # To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
 # To upload existing file on Local machine/JumpHost to TAC case: 5
 # version 1.0
@@ -40,7 +40,7 @@ def initial_func(user_prompt):
     return connection, prompt, hostname, lines
 
 
-# This function is for running Global show tech commands one at a time and capture filename with path.
+# This function is for running IOS-XR mode show tech commands one at a time and capture filename with path.
 def run_cmd():
     print(f'\nGenerating "{user_cmd}" on device {hostname}. Please wait...\n')
     output = connection.send_command(user_cmd, max_loops=50000, delay_factor=5)
@@ -115,7 +115,7 @@ def md5_compare():
 
 
 # This function is to run Admin mode show tech commands and copy the file to
-# Global mode in "/harddisk/showtech/" directory.
+# IOS-XR mode in "/harddisk/showtech/" directory.
 def run_cmd_admin():
     print(f'Entering in Admin mode to generate Admin specific show tech of command - "{user_cmd}"')
 
@@ -136,7 +136,7 @@ def run_cmd_admin():
         file_start_loc = output.find('/')
         file_end_loc = output.find('.tgz') + 4
         filename = output[file_start_loc:file_end_loc]
-        print('\nCopying file to Global mode')
+        print('\nCopying file to IOS-XR mode')
         copy_cmd = f'copy {filename} harddisk:/showtech location 0/{active_processor}/CPU0/VM1'
         copy2global = connection.send_command(copy_cmd, expect_string=r'sysadmin')
         print(f'{copy_cmd}/n{copy2global}')
@@ -165,9 +165,10 @@ def upload_2_sr():
 prompt_choices = '''
 
 #################################################################################################
+# Author: Rakesh Kumar                                                                          #
 # Version 1.0                                                                                   #
 # Purpose: This Script can help Engineers/Customers to automate gathering TAC requested DATA    #
-  for IOS-XR devices. The could include various show tech in Global/Admin mode or simple        #
+  for IOS-XR devices. The could include various show tech in IOS-XR/Admin mode or simple        #
   Show commands outputs.                                                                        #
                                                                                                 #
   User need to supply the information to script based on Task chosen and this Script will       #
@@ -181,7 +182,7 @@ prompt_choices = '''
 Please select the Task number from below List and Enter as your choice on Prompt.
 ==================================================================================
 
-To run show tech commands in "Global mode" and upload file/s to TAC case Choose: 1
+To run show tech commands in "IOS-XR mode" and upload file/s to TAC case Choose: 1
 To run show tech commands in "Admin mode" and upload file/s to TAC case Choose:  2
 To upload already generated or saved file/s to TAC case Choose:                  3
 To run Only SHOW commands , capture output to file and upload it to TAC case Choose: 4
@@ -201,6 +202,9 @@ sr_token = input("Enter Upload Token: ")
 # Defining Global variables.
 device_ip = username = password = str()
 
+# Capturing start time
+start = time.perf_counter()
+
 if get_choice < 5:
     # Take user input for Device IP and Credentials.
     device_ip = input('Enter device ip: ')
@@ -217,6 +221,7 @@ device = {
     'password': password,
     'port': 22,  # optional, default 22
     'verbose': True,  # optional, default False
+    'global_delay_factor': 10,
 }
 
 # List to store any failed operation of command or file copy etc.
@@ -226,7 +231,7 @@ failed_list = []
 if get_choice == 1:
     print(f'\nEnter one show tech command per line. Once all show tech commands entered,\n'
           f'just Hit Enter key to execute script\n')
-    user_prompt = 'Enter show tech command(Only Global mode): '
+    user_prompt = 'Enter show tech command(Only IOS-XR mode): '
     t = initial_func(user_prompt)
     (connection, prompt, hostname, lines) = t
 
@@ -242,7 +247,7 @@ if get_choice == 1:
             failed_list.append(user_cmd)
         md5_compare()
 
-    print(f'List of local files: {local_files}')
+    print(f'List of local files: {local_files}\n')
     connection.disconnect()
     print(f'Disconnected from device - {hostname}')
 
@@ -270,7 +275,7 @@ elif get_choice == 2:
             failed_list.append(user_cmd)
         md5_compare()
 
-    print(f'List of local files: {local_files}')
+    print(f'List of local files: {local_files}\n')
     connection.disconnect()
     print(f'Disconnected from device - {hostname}')
 
@@ -296,7 +301,7 @@ elif get_choice == 3:
             failed_list.append(filename)
         md5_compare()
 
-    print(f'List of local files: {local_files}')
+    print(f'List of local files: {local_files}\n')
     connection.disconnect()
     print(f'Disconnected from device - {hostname}')
 
@@ -321,10 +326,10 @@ elif get_choice == 4:
             output = connection.send_command(cmd, max_loops=50000, delay_factor=5, strip_command=False,
                                              strip_prompt=False)
             logs.write(f'{prompt}{output}\n{100 * "#"}\n')
-            if '^' in output:
+            if '         ^' in output:
                 failed_list.append(cmd)
 
-    print(f'File will be uploaded to case - {local_files}')
+    print(f'File will be uploaded to case - {local_files}\n')
     connection.disconnect()
     print(f'Disconnected from device - {hostname}')
 
@@ -340,5 +345,10 @@ elif get_choice == 5:
     upload_2_sr()
 else:
     print("Choose Option only from 1 to 5")
+
+# Capturing Script end time.
+end = time.perf_counter()
+total_time = (end-start) / 60
+print(f'\nTotal execution time {round(total_time,2)} minutes.')
 
 print('\n\n#######  Thanks for using this Script.  ########\n')
